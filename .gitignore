@@ -31,6 +31,7 @@ Thumbs.db
 .idea/
 
 # Data and results
-# Uncomment these if data/results are generated or too large for Git.
-data/
+# Ignore everything under data/ except its documentation.
+data/*
+!data/README.md
 
