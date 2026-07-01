@@ -1,13 +1,8 @@
 import os
 from pathlib import Path
 import tifffile as tifffile
-import caiman as cm
-from caiman.source_extraction.cnmf import cnmf, params
-import caiman.source_extraction.cnmf as cnmf
-import caiman.paths
 import glob as glob
 import numpy as np
-
 
 def generate_file_list(base_directory, search_string='Tseries', channel='Ch2'):
     """Return the master OME-TIFF path (default: Ch2 calcium channel) for each matching T-series folder."""
