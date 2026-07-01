@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import tifffile as tifffile
 import caiman as cm
 from caiman.source_extraction.cnmf import cnmf, params
@@ -8,45 +9,30 @@ import glob as glob
 import numpy as np
 
 
-def generate_file_list(base_directory, search_string='Tseries'):
-    # base_directory = '/projectnb/mylabscc/Jack/Data/IR25_x_Gcamp1/20241015_Ir25_Gcamp/RawData/'
-
+def generate_file_list(base_directory, search_string='Tseries', channel='Ch2'):
+    """Return the master OME-TIFF path (default: Ch2 calcium channel) for each matching T-series folder."""
     full_file_list = []
-    folder_names = []
-    # Find T-series folders in the base directory
-    for item in os.listdir(base_directory):
-        # Create the full path
-        item_path = os.path.join(base_directory, item)
-        # Check if the item is a directory (and not a subdirectory)
-        if os.path.isdir(item_path):
-            print(item_path)
-            folder_names.append(item_path)
-    # Get the name of the OME tiff master file (first Ch1 file)
-    for folder in folder_names:
-        if search_string in folder:
-            # print(folder)
-            fnames_ref = glob.glob(os.path.join(folder, '*Ch2*'))
-            fnames_ref.sort()
-            full_file_list.append(fnames_ref[0])
-
+    # Find T-series folders in the base directory and grab the master OME-TIFF for the given channel
+    for entry in os.scandir(base_directory):
+        if not entry.is_dir() or search_string not in entry.name:
+            continue
+        fnames = sorted(glob.glob(os.path.join(entry.path, f'*{channel}*')))
+        if not fnames:
+            print(f"Warning: no {channel} files found in {entry.path}, skipping.")
+            continue
+        full_file_list.append(fnames[0])
     return full_file_list
 
 
 def create_output_directory(base_directory, dest_directory):
-
-    # Split the source directory into parts
-    parts = base_directory.split(os.sep)
-
-    # Check if there are enough parts to get the second to last folder
-    if len(parts) < 2:
+    """Create (and return) an output directory named after base_directory's parent (session) folder."""
+    session_folder = Path(base_directory).parent.name
+    if not session_folder:
         raise ValueError("The source directory does not have enough subfolders.")
-    # Get the second to last folder name
-    second_last_folder = parts[-3]
-    # Create the new folder path in the destination directory
-    new_folder_path = os.path.join(dest_directory, second_last_folder)
-    # Create the new folder
-    os.makedirs(new_folder_path, exist_ok=True)
+    new_folder_path = Path(dest_directory) / session_folder
+    new_folder_path.mkdir(parents=True, exist_ok=True)
     print(f"New folder created at: {new_folder_path}")
+    return new_folder_path
 
 
 def convert_files_for_caiman(full_file_list):
