@@ -35,19 +35,26 @@ def create_output_directory(base_directory, dest_directory):
     return new_folder_path
 
 
-def convert_files_for_caiman(full_file_list):
-    # Read all data as a single sequence
+def convert_files_for_caiman(full_file_list, output_dir=None, filename='CaData.h5'):
+    """Load per-run 3D OME-TIFF stacks, concatenate them along time, and save
+    as HDF5 in CaImAn's expected (T, Y, X, Z) order (time first, Z last).
+    """
     image_sequence = tifffile.imread(full_file_list)
-    print(np.shape(image_sequence))
+    if image_sequence.ndim != 5:
+        raise ValueError(
+            f"Expected a 5D (runs, T, Z, Y, X) stack from {len(full_file_list)} "
+            f"file(s), got shape {image_sequence.shape}."
+        )
+    n_runs, nt, nz, ny, nx = image_sequence.shape
 
-    # Concatenate imaging runs end to end
-    nds, nt, nz, ny, nx = np.shape(image_sequence)
-    im_sequence_cat = image_sequence.reshape(nds * nt, nz, ny, nx)
-    print(np.shape(im_sequence_cat))
-    image_sequence = im_sequence_cat
-    # Switch format to TXYZ for Caiman
+    # Concatenate runs end to end along the time axis
+    image_sequence = image_sequence.reshape(n_runs * nt, nz, ny, nx)
+
+    # CaImAn expects (T, Y, X, Z): time first, Z (depth) last
     ca_movie = cm.movie(image_sequence)
     ca_movie = np.transpose(ca_movie, (0, 2, 3, 1))
-    print(np.shape(ca_movie))
-    # Save as h5 data for easier handling
-    ca_movie.save(os.path.join(os.environ["CAIMAN_DATA"], 'CaData.h5'))
+
+    output_dir = output_dir or os.environ["CAIMAN_DATA"]
+    save_path = os.path.join(output_dir, filename)
+    ca_movie.save(save_path)
+    return save_path
