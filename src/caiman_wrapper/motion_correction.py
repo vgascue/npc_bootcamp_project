@@ -46,7 +46,7 @@ def run_motion_correction(opts, dview=None):
     Pass the `dview` returned by start_cluster() to parallelize across patches.
     """
     motion_params = dict(opts.get_group('motion'))
-    fnames = motion_params.pop('fnames')
+    fnames = dict(opts.get_group('data'))['fnames']
     mc = cm.motion_correction.MotionCorrect(fnames, dview=dview, **motion_params)
     mc.motion_correct(save_movie=True)
     return mc
