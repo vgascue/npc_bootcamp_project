@@ -68,6 +68,9 @@ def run_cnmf(images, opts, dview=None, n_processes=None, se=np.ones((3, 3, 1), d
     if se is not None:
         cnm.params.set('spatial', {'se': se})
     cnm.fit(images)
+    # CNMF.fit() sets cnm.dims but never copies it onto cnm.estimates.dims,
+    # which several Estimates methods (e.g. nb_view_components_3d) rely on.
+    cnm.estimates.dims = cnm.dims
     return cnm
 
 
