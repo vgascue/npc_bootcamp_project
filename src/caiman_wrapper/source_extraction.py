@@ -10,7 +10,7 @@ def build_cnmf_params(
     decay_time,
     gSig,
     K=40,
-    merge_thr=0.85,
+    merge_thr=0.1,
     p=2,
     nb=2,
     rf=None,

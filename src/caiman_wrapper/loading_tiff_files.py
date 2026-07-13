@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import h5py
@@ -6,9 +7,23 @@ import tifffile as tifffile
 import glob as glob
 import numpy as np
 
+def _extract_run_id(file_path):
+    """Extract the trailing run number from a T-series folder name, e.g.
+    '.../TSeries-05192026-1120-221/foo.tif' -> 221. Raises ValueError if the
+    folder name doesn't end in digits."""
+    folder_name = Path(file_path).parent.name
+    match = re.search(r'(\d+)$', folder_name)
+    if not match:
+        raise ValueError(f"Could not find a trailing run number in folder name '{folder_name}'.")
+    return int(match.group(1))
+
+
 def generate_file_list(base_directory, search_string='TSeries', channel='Ch2'):
     """Return, for each matching T-series folder directly under base_directory,
     the sorted list of all per-cycle OME-TIFF files for the given channel.
+    Folders are ordered by their trailing run number (see _extract_run_id),
+    not by filesystem enumeration order, so the result is deterministic and
+    consistent across separate calls (e.g. one per channel).
 
     Each run's files must be passed to tifffile.imread() together (as a
     single list) to be stitched into the full (T, Z, Y, X) movie for that
@@ -30,6 +45,7 @@ def generate_file_list(base_directory, search_string='TSeries', channel='Ch2'):
             print(f"Warning: no {channel or 'matching'} files found in {entry.path}, skipping.")
             continue
         run_file_lists.append(fnames)
+    run_file_lists.sort(key=lambda fnames: _extract_run_id(fnames[0]))
     return run_file_lists
 
 
@@ -120,6 +136,9 @@ def convert_files_for_caiman(
       (reference) and Ch2 (calcium) OME-TIFF file sets, as returned by
       `generate_file_list`.
 
+    Also writes a stitch_order.txt to output_dir listing the T-series run
+    numbers in the order they were concatenated.
+
     Returns the (ref_path, ca_path) the two channels were saved to.
     """
     output_dir = Path(output_dir)
@@ -128,16 +147,24 @@ def convert_files_for_caiman(
 
     if single_page:
         full_file_list = generate_file_list(base_directory, search_string, channel=None)
+        run_order = [_extract_run_id(files[0]) for files in full_file_list]
         ref, ca = _load_single_page_channels(full_file_list)
     else:
         ref_file_list = generate_file_list(base_directory, search_string, channel=ref_channel)
         ca_file_list = generate_file_list(base_directory, search_string, channel=ca_channel)
-        if len(ref_file_list) != len(ca_file_list):
+        ref_run_ids = [_extract_run_id(files[0]) for files in ref_file_list]
+        ca_run_ids = [_extract_run_id(files[0]) for files in ca_file_list]
+        if ref_run_ids != ca_run_ids:
             raise ValueError(
-                f"Found {len(ref_file_list)} {ref_channel} run(s) but "
-                f"{len(ca_file_list)} {ca_channel} run(s); expected one of each per T-series folder."
+                f"{ref_channel} run(s) {ref_run_ids} don't match {ca_channel} run(s) {ca_run_ids}; "
+                f"expected the same set of T-series runs, in the same order, for both channels."
             )
+        run_order = ref_run_ids
         ref, ca = _load_split_channel_files(ref_file_list, ca_file_list)
+
+    order_path = output_dir / 'stitch_order.txt'
+    order_path.write_text('\n'.join(str(run_id) for run_id in run_order))
+    print(f"Stitch order saved to: {order_path}")
 
     print('Writing reference and calcium data in parallel...')
     with ThreadPoolExecutor(max_workers=2) as ex:
