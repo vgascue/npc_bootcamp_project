@@ -18,6 +18,38 @@ def _extract_run_id(file_path):
     return int(match.group(1))
 
 
+_STIM_FOLDER_PATTERN = re.compile(r'^TSeries-\d+-\d+-(?P<stim>.+)-(?P<n_reps>\d+)Reps-(?P<run_id>\d+)$')
+
+
+def parse_stim_info_from_folders(base_directory, search_string='TSeries'):
+    """Build a stim_info-style table directly from T-series folder names
+    that follow the self-describing 'TSeries-<date>-<time>-<stim>-<n>Reps-<run_id>'
+    naming convention, e.g. 'TSeries-09012026-1204-Ch2-3Reps-1006' ->
+    stim='Ch2' (an odor delivery channel, not a fluorescence channel),
+    n_reps=3, folder_id=1006.
+
+    Returns a list of {'folder_id', 'stim', 'n_reps'} dicts, sorted by
+    folder_id -- turn into a DataFrame and save as stim_info.csv, adding any
+    other columns (e.g. concentration, duration) by hand afterward. Folders
+    that don't match the pattern are skipped with a warning.
+    """
+    rows = []
+    for entry in os.scandir(base_directory):
+        if not entry.is_dir() or search_string not in entry.name:
+            continue
+        match = _STIM_FOLDER_PATTERN.match(entry.name)
+        if not match:
+            print(f"Warning: folder name '{entry.name}' doesn't match the expected naming pattern, skipping.")
+            continue
+        rows.append({
+            'folder_id': int(match.group('run_id')),
+            'stim': match.group('stim'),
+            'n_reps': int(match.group('n_reps')),
+        })
+    rows.sort(key=lambda r: r['folder_id'])
+    return rows
+
+
 def generate_file_list(base_directory, search_string='TSeries', channel='Ch2'):
     """Return, for each matching T-series folder directly under base_directory,
     the sorted list of all per-cycle OME-TIFF files for the given channel.
@@ -35,7 +67,13 @@ def generate_file_list(base_directory, search_string='TSeries', channel='Ch2'):
     rather than split across Ch1/Ch2 filenames).
     """
     run_file_lists = []
-    pattern = f'*{channel}*' if channel else '*.tif*'
+    # Match the per-cycle channel tag specifically (always underscore-delimited,
+    # e.g. '..._Cycle00001_Ch1_000001.ome.tif') rather than `channel` appearing
+    # anywhere in the name -- a T-series folder's own name can incidentally
+    # contain the same substring (e.g. a folder named '...-Ch2-3Reps-1006'),
+    # in which case every file in it inherits that folder-name prefix and a
+    # bare `*Ch2*` pattern would match both channels' real files.
+    pattern = f'*_{channel}_*.tif*' if channel else '*.tif*'
     # Find T-series folders in the base directory and grab all matching files for the given channel
     for entry in os.scandir(base_directory):
         if not entry.is_dir() or search_string not in entry.name:

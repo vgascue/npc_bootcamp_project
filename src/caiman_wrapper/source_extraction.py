@@ -9,12 +9,14 @@ def build_cnmf_params(
     fr,
     decay_time,
     gSig,
+    gSiz=None,
     K=40,
     merge_thr=0.1,
     p=2,
     nb=2,
     rf=None,
     stride_cnmf=None,
+    only_init=False,
     bas_nonneg=True,
     min_SNR=0.1,
     rval_thr=0.1,
@@ -29,19 +31,34 @@ def build_cnmf_params(
     gSig: expected half-width of a neuron in pixels, one value per spatial
         dimension (e.g. [14, 12.5, 5] for 3D). fr/decay_time/gSig are
         acquisition-specific and have no sensible default.
+    gSiz: size of the box carved out around each candidate component
+        during greedy_roi initialization, one value per spatial dimension.
+        Independent of gSig -- gSig only affects the Gaussian smoothing used
+        to find candidate peaks, gSiz is the actual extent of the local
+        patch a component gets fit within. Defaults to gSig + 1 if not
+        given. If two nearby cells keep getting initialized as a single
+        component, try shrinking gSiz so the carved-out box doesn't span
+        both cells' pixels.
+    only_init: if True, CNMF.fit() stops right after initialization and
+        skips the spatial/temporal refinement loop entirely -- including
+        the automatic merge step that uses merge_thr, which then has no
+        effect at all. Only makes sense paired with patch-based processing
+        (rf not None); leave False for whole-FOV (rf=None) fitting, which is
+        the default here, so refinement/merging actually run.
     **overrides: any additional CNMFParams keys (e.g. use_cnn, ssub, tsub),
         merged in as-is.
     """
     gSig = np.asarray(gSig)
+    gSiz = np.asarray(gSiz) if gSiz is not None else gSig + 1
     parameter_dict = {
         'fr': fr,
         'decay_time': decay_time,
         'p': p,
         'nb': nb,
         'gSig': gSig,
-        'gSiz': gSig + 1,
+        'gSiz': gSiz,
         'rolling_sum': True,
-        'only_init': True,
+        'only_init': only_init,
         'rf': rf,
         'stride': stride_cnmf,
         'merge_thr': merge_thr,
